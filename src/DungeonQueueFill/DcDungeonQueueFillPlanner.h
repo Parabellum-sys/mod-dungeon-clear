@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,10 @@ namespace DcDungeonQueueFillPlanner
         std::uint8_t classId = 0;
         char const* specName = "";              // premade-spec template to force
         char const* fallbackSpec = "";          // substring match if absent
+        // A Conquest of Azeroth slot: classId stays 0 until the claim picks a
+        // pool character of a CoA class, and the role is given in the world
+        // (CoaSwitchRole) rather than by a premade-spec template.
+        bool anyCoaClass = false;
     };
 
     enum class Kind : std::uint8_t
@@ -128,7 +133,21 @@ namespace DcDungeonQueueFillPlanner
     // repeated class is a disappointment and a missing tank is a broken
     // dungeon. Empty for a player with no fill behind them.
     Result Plan(std::vector<Human> const& humans, std::uint32_t level, std::uint32_t expansion,
-                std::uint32_t seed, std::vector<std::uint8_t> const& avoidClasses = {});
+                std::uint32_t seed, std::vector<std::uint8_t> const& avoidClasses = {},
+                bool coaClasses = false);
+
+    // The slot Plan emits for each role on a Conquest of Azeroth realm.
+    Slot CoaSlot(char const* role);
+
+    // Which pool character a CoA slot takes, given the class of each free
+    // candidate: one whose class is not known unable to play the role
+    // (`unableClasses`, learned when CoaSwitchRole refused it), preferring a
+    // class the party does not field yet. Index into `candidateClasses`, or -1
+    // when every candidate's class is known unable. Pure, for the tests.
+    std::ptrdiff_t PickCoaCandidate(std::vector<std::uint8_t> const& candidateClasses,
+                                    std::set<std::uint8_t> const& unableClasses,
+                                    std::set<std::uint8_t> const& usedClasses,
+                                    std::uint32_t& state);
 
     // Role token -> the single role bit. kRoleNone for an unknown token.
     std::uint8_t MaskForRole(char const* role);

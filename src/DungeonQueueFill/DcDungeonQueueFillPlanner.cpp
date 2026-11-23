@@ -116,6 +116,40 @@ namespace DcDungeonQueueFillPlanner
         }
     }
 
+    Slot CoaSlot(char const* role)
+    {
+        Slot out;
+        out.role = role;
+        out.roleMask = MaskForRole(role);
+        out.classId = 0;  // chosen at claim time
+        out.specName = "coa";
+        out.fallbackSpec = "";
+        out.anyCoaClass = true;
+        return out;
+    }
+
+    std::ptrdiff_t PickCoaCandidate(std::vector<std::uint8_t> const& candidateClasses,
+                                    std::set<std::uint8_t> const& unableClasses,
+                                    std::set<std::uint8_t> const& usedClasses,
+                                    std::uint32_t& state)
+    {
+        std::vector<std::size_t> fresh;  // a class the party does not field yet
+        std::vector<std::size_t> able;   // any class not known unable to play the role
+        for (std::size_t i = 0; i < candidateClasses.size(); ++i)
+        {
+            std::uint8_t const classId = candidateClasses[i];
+            if (unableClasses.count(classId))
+                continue;
+            able.push_back(i);
+            if (!usedClasses.count(classId))
+                fresh.push_back(i);
+        }
+        std::vector<std::size_t> const& pick = fresh.empty() ? able : fresh;
+        if (pick.empty())
+            return -1;
+        return static_cast<std::ptrdiff_t>(pick[NextRand(state) % pick.size()]);
+    }
+
     std::uint8_t MaskForRole(char const* role)
     {
         if (!role)
@@ -152,7 +186,8 @@ namespace DcDungeonQueueFillPlanner
     }
 
     Result Plan(std::vector<Human> const& humans, std::uint32_t level, std::uint32_t expansion,
-                std::uint32_t seed, std::vector<std::uint8_t> const& avoidClasses)
+                std::uint32_t seed, std::vector<std::uint8_t> const& avoidClasses,
+                bool coaClasses)
     {
         Result r;
 
@@ -199,13 +234,30 @@ namespace DcDungeonQueueFillPlanner
             return r;
         }
 
+        r.slots.reserve(need);
+        if (coaClasses)
+        {
+            // A Conquest of Azeroth realm: the addclass pool holds CoA classes,
+            // which no DcTestComp pool lists. The class is not drawn here but at
+            // claim time, from the characters the pool really holds (see
+            // DcPoolBots::ClaimCoaPoolCharacter), and the role is given to the
+            // character once it is in the world (CoaSwitchRole).
+            for (std::size_t i = 0; i < needTank; ++i)
+                r.slots.push_back(CoaSlot("tank"));
+            for (std::size_t i = 0; i < needHeal; ++i)
+                r.slots.push_back(CoaSlot("heal"));
+            for (std::size_t i = 0; i < needDps; ++i)
+                r.slots.push_back(CoaSlot("dps"));
+            r.kind = Kind::Ok;
+            return r;
+        }
+
         DcTestComp::Roster const roster = RosterFor(level, expansion);
         // A different stream from the one the role draw ran on, so the class a
         // fill fields is not a tell for the role its player was given.
         std::uint32_t state = seed ^ 0x5bf03635u;
         std::set<std::uint8_t> used;
 
-        r.slots.reserve(need);
         for (std::size_t i = 0; i < needTank; ++i)
             r.slots.push_back(Draw("tank", used, avoidClasses, roster, state));
         for (std::size_t i = 0; i < needHeal; ++i)

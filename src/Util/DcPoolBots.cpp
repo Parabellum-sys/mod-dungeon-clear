@@ -6,6 +6,8 @@
 #include "Util/DcPoolBots.h"
 
 #include <algorithm>
+#include <map>
+#include <set>
 
 #include "CharacterCache.h"
 #include "Group.h"
@@ -30,6 +32,16 @@
 #include "TestRun/DcTestRunManager.h"
 #include "Util/DcDungeonAccess.h"
 #include "Ai/Dungeon/DungeonClear/Util/DcRunTravelGuard.h"
+
+// The CoA role switch lives in mod-playerbots (Ai/Class/Coa). A build against
+// a playerbots without it keeps the stock class pools: PoolHasCoaClasses says
+// no, and the dungeon fill never plans a CoA slot.
+#if __has_include("CoaSpecialization.h")
+#include "CoaSpecialization.h"
+#define DC_HAS_COA_ROLES 1
+#else
+#define DC_HAS_COA_ROLES 0
+#endif
 
 namespace
 {
@@ -61,6 +73,25 @@ namespace
 
         return alliance ? SafeSpot{0, -8833.38f, 628.628f, 94.0066f, 1.06535f}
                         : SafeSpot{1, 1629.85f, -4373.64f, 31.5573f, 3.69762f};
+    }
+
+    // Whether the character really is of `classId`. addclassCache is keyed by
+    // RandomPlayerbotMgr::GetTeamClassIdx (alliance * 20 + class), which was
+    // sized for the stock classes: with the CoA classes (12 to 32) a Horde key
+    // from 20 up is also an Alliance key, so one bucket can hold both
+    // factions. The class tells them apart (Alliance class c sits in bucket
+    // 20 + c, the Horde class sharing it is 20 + c itself).
+    bool IsOfClass(ObjectGuid guid, std::uint8_t classId)
+    {
+        CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(guid);
+        return entry && entry->Class == classId;
+    }
+
+    // Classes SwitchCoaRole refused, per role bit. World thread only.
+    std::map<std::uint8_t, std::set<std::uint8_t>>& UnableByRole()
+    {
+        static std::map<std::uint8_t, std::set<std::uint8_t>> unable;
+        return unable;
     }
 
     // Every exclusion ClaimPoolCharacter and CountFree share.
@@ -103,7 +134,7 @@ namespace DcPoolBots
         std::vector<ObjectGuid> fresh;  // available, and not on the avoid list
         for (ObjectGuid const& guid : pool)
         {
-            if (!IsFree(guid, heldByCaller))
+            if (!IsOfClass(guid, classId) || !IsFree(guid, heldByCaller))
                 continue;
             available.push_back(guid);
             if (std::find(avoid.begin(), avoid.end(), guid) == avoid.end())
@@ -128,10 +159,93 @@ namespace DcPoolBots
             auto const& pool =
                 sRandomPlayerbotMgr.addclassCache[RandomPlayerbotMgr::GetTeamClassIdx(alliance, classId)];
             for (ObjectGuid const& guid : pool)
-                if (IsFree(guid, heldByCaller))
+                if (IsOfClass(guid, classId) && IsFree(guid, heldByCaller))
                     ++n;
         }
         return n;
+    }
+
+    bool PoolHasCoaClasses(bool alliance)
+    {
+#if DC_HAS_COA_ROLES
+        for (std::uint8_t classId = kFirstCoaClass; classId < MAX_CLASSES; ++classId)
+        {
+            auto const it =
+                sRandomPlayerbotMgr.addclassCache.find(RandomPlayerbotMgr::GetTeamClassIdx(alliance, classId));
+            if (it == sRandomPlayerbotMgr.addclassCache.end())
+                continue;
+            for (ObjectGuid const& guid : it->second)
+                if (IsOfClass(guid, classId))
+                    return true;
+        }
+#else
+        (void)alliance;
+#endif
+        return false;
+    }
+
+    ObjectGuid ClaimCoaPoolCharacter(bool alliance, std::uint8_t roleMask,
+                                     std::set<std::uint8_t> const& usedClasses,
+                                     std::uint32_t& drawState, std::vector<ObjectGuid> const& avoid,
+                                     std::function<bool(ObjectGuid)> const& heldByCaller,
+                                     std::uint8_t& classOut)
+    {
+        classOut = 0;
+        std::set<std::uint8_t> const& unable = UnableByRole()[roleMask];
+
+        // Two passes, like ClaimPoolCharacter: characters off the avoid list
+        // first, the whole pool only when that leaves nobody.
+        for (bool const honourAvoid : {true, false})
+        {
+            std::vector<ObjectGuid> guids;
+            std::vector<std::uint8_t> classes;
+            for (std::uint8_t classId = kFirstCoaClass; classId < MAX_CLASSES; ++classId)
+            {
+                auto const it = sRandomPlayerbotMgr.addclassCache.find(
+                    RandomPlayerbotMgr::GetTeamClassIdx(alliance, classId));
+                if (it == sRandomPlayerbotMgr.addclassCache.end())
+                    continue;
+                for (ObjectGuid const& guid : it->second)
+                {
+                    if (!IsOfClass(guid, classId) || !IsFree(guid, heldByCaller))
+                        continue;
+                    if (honourAvoid && std::find(avoid.begin(), avoid.end(), guid) != avoid.end())
+                        continue;
+                    guids.push_back(guid);
+                    classes.push_back(classId);
+                }
+            }
+
+            std::ptrdiff_t const pick =
+                DcDungeonQueueFillPlanner::PickCoaCandidate(classes, unable, usedClasses, drawState);
+            if (pick >= 0)
+            {
+                classOut = classes[std::size_t(pick)];
+                return guids[std::size_t(pick)];
+            }
+        }
+        return ObjectGuid::Empty;
+    }
+
+    bool SwitchCoaRole(Player* bot, std::uint8_t roleMask)
+    {
+#if DC_HAS_COA_ROLES
+        if (!bot)
+            return false;
+        CoaRole const role = roleMask == DcDungeonQueueFillPlanner::kRoleTank     ? CoaRole::Tank
+                             : roleMask == DcDungeonQueueFillPlanner::kRoleHealer ? CoaRole::Heal
+                                                                                  : CoaRole::Dps;
+        return CoaCanSwitchRole(bot, role) && CoaSwitchRole(bot, role);
+#else
+        (void)bot;
+        (void)roleMask;
+        return false;
+#endif
+    }
+
+    void MarkCoaClassUnable(std::uint8_t classId, std::uint8_t roleMask)
+    {
+        UnableByRole()[roleMask].insert(classId);
     }
 
     char const* CapitalName(bool alliance)

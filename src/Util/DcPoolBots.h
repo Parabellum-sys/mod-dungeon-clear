@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,35 @@ namespace DcPoolBots
     // planner caps each side at this so a fill that cannot reach the
     // battleground's minimum says so up front instead of timing out.
     std::uint32_t CountFree(bool alliance, std::function<bool(ObjectGuid)> const& heldByCaller);
+
+    // The first class id of the Conquest of Azeroth classes (Barbarian); the
+    // stock classes end at the druid (11).
+    inline constexpr std::uint8_t kFirstCoaClass = 12;
+
+    // Whether this faction's addclass pool holds any character of a CoA class
+    // AND this build can give such a character a role (mod-playerbots ships
+    // CoaSpecialization.h). False on a stock realm or a stock build, which
+    // keeps the dungeon fill on its stock class pools.
+    bool PoolHasCoaClasses(bool alliance);
+
+    // ClaimPoolCharacter for a CoA slot: one free character of any CoA class
+    // whose class is not known unable to play `roleMask` (MarkCoaClassUnable),
+    // preferring a class not in `usedClasses`. Writes the character's class to
+    // `classOut`. Empty when none is left.
+    ObjectGuid ClaimCoaPoolCharacter(bool alliance, std::uint8_t roleMask,
+                                     std::set<std::uint8_t> const& usedClasses,
+                                     std::uint32_t& drawState, std::vector<ObjectGuid> const& avoid,
+                                     std::function<bool(ObjectGuid)> const& heldByCaller,
+                                     std::uint8_t& classOut);
+
+    // Gives `bot` (a CoA class) a specialization of `roleMask`'s role, its
+    // gear left as it is. False when its class has no such specialization, or
+    // when this build cannot switch roles.
+    bool SwitchCoaRole(Player* bot, std::uint8_t roleMask);
+
+    // Remembered for the worldserver's life once SwitchCoaRole refused a class
+    // for a role, so later draws skip it. World thread only.
+    void MarkCoaClassUnable(std::uint8_t classId, std::uint8_t roleMask);
 
     // One step of putting `bot` down in its faction's capital. True once it
     // is standing there; false while a teleport is still in flight (call

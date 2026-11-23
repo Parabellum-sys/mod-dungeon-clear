@@ -648,3 +648,96 @@ namespace
         EXPECT_LT(Stage::Releasing, Stage::Done);
     }
 }
+
+// A Conquest of Azeroth pool: the plan keeps the role arithmetic and leaves the
+// class to the claim (CoA slots, no stock class or premade template).
+TEST(DcDungeonQueueFillPlanner, CoaPoolPlansCoaSlotsForEveryRole)
+{
+    Result const r = Plan({H(kRoleHealer)}, 18, kClassic, 1234, {}, /*coaClasses*/ true);
+    ASSERT_EQ(r.kind, Kind::Ok);
+    ASSERT_EQ(r.slots.size(), 4u);
+    EXPECT_EQ(CountRole(r, kRoleTank), 1u);
+    EXPECT_EQ(CountRole(r, kRoleHealer), 0u);
+    EXPECT_EQ(CountRole(r, kRoleDamage), 3u);
+    for (Slot const& s : r.slots)
+    {
+        EXPECT_TRUE(s.anyCoaClass);
+        EXPECT_EQ(s.classId, 0u);
+        EXPECT_EQ(s.roleMask, MaskForRole(s.role));
+    }
+}
+
+// Same humans, same seed, stock pool: the stock draw, untouched.
+TEST(DcDungeonQueueFillPlanner, StockPoolStillDrawsStockClasses)
+{
+    Result const stock = Plan({H(kRoleHealer)}, 18, kClassic, 1234);
+    Result const explicitStock = Plan({H(kRoleHealer)}, 18, kClassic, 1234, {}, false);
+    ASSERT_EQ(stock.kind, Kind::Ok);
+    ASSERT_EQ(stock.slots.size(), explicitStock.slots.size());
+    for (std::size_t i = 0; i < stock.slots.size(); ++i)
+    {
+        EXPECT_FALSE(stock.slots[i].anyCoaClass);
+        EXPECT_GE(stock.slots[i].classId, 1u);
+        EXPECT_LE(stock.slots[i].classId, 11u);
+        EXPECT_EQ(stock.slots[i].classId, explicitStock.slots[i].classId);
+    }
+}
+
+// The unresolvable cases are refused before the pool kind matters.
+TEST(DcDungeonQueueFillPlanner, CoaPoolStillRefusesTwoTankOnlyPlayers)
+{
+    Result const r = Plan({H(kRoleTank), H(kRoleTank)}, 18, kClassic, 1, {}, true);
+    EXPECT_EQ(r.kind, Kind::Unresolvable);
+    EXPECT_TRUE(r.slots.empty());
+}
+
+TEST(DcDungeonQueueFillPlanner, PickCoaCandidateSkipsUnableClasses)
+{
+    std::vector<std::uint8_t> const classes = {12, 13, 14, 13};
+    std::set<std::uint8_t> const unable = {12, 14};
+    for (std::uint32_t seed = 0; seed < 50; ++seed)
+    {
+        std::uint32_t state = seed;
+        std::ptrdiff_t const i = PickCoaCandidate(classes, unable, {}, state);
+        ASSERT_GE(i, 0);
+        EXPECT_EQ(classes[std::size_t(i)], 13u);
+    }
+}
+
+TEST(DcDungeonQueueFillPlanner, PickCoaCandidatePrefersAClassNotFielded)
+{
+    std::vector<std::uint8_t> const classes = {15, 16, 15, 15};
+    std::set<std::uint8_t> const used = {15};
+    for (std::uint32_t seed = 0; seed < 50; ++seed)
+    {
+        std::uint32_t state = seed;
+        std::ptrdiff_t const i = PickCoaCandidate(classes, {}, used, state);
+        ASSERT_GE(i, 0);
+        EXPECT_EQ(classes[std::size_t(i)], 16u);
+    }
+}
+
+// A pool of one class already fielded still fills the slot: variety is a
+// preference, never a reason to fail.
+TEST(DcDungeonQueueFillPlanner, PickCoaCandidateRepeatsAClassRatherThanFail)
+{
+    std::vector<std::uint8_t> const classes = {15, 15};
+    std::uint32_t state = 7;
+    std::ptrdiff_t const i = PickCoaCandidate(classes, {}, {15}, state);
+    EXPECT_GE(i, 0);
+}
+
+TEST(DcDungeonQueueFillPlanner, PickCoaCandidateFailsWhenEveryClassIsUnable)
+{
+    std::uint32_t state = 7;
+    EXPECT_EQ(PickCoaCandidate({12, 12}, {12}, {}, state), -1);
+    EXPECT_EQ(PickCoaCandidate({}, {}, {}, state), -1);
+}
+
+TEST(DcDungeonQueueFillPlanner, PickCoaCandidateReplaysFromItsSeed)
+{
+    std::vector<std::uint8_t> const classes = {12, 13, 14, 15, 16, 17};
+    std::uint32_t a = 99, b = 99;
+    for (int n = 0; n < 10; ++n)
+        EXPECT_EQ(PickCoaCandidate(classes, {}, {}, a), PickCoaCandidate(classes, {}, {}, b));
+}

@@ -78,6 +78,7 @@ public:
         bool queued = false;      // confirmed at LFG_STATE_QUEUED
         bool attuned = false;     // credited with `_accessTargets` (see TickSanitizing)
         bool redrawn = false;     // already swapped for another draw once
+        std::uint8_t coaRedraws = 0;  // CoA slot: characters tried after the first
         std::uint8_t requeues = 0;  // times put back after the core ejected it
     };
 
@@ -183,6 +184,17 @@ private:
     // is most of the way to "I keep getting the same party" on its own.
     ObjectGuid ClaimPoolCharacter(std::uint8_t classId);
 
+    // A CoA slot's claim: a free character of any CoA class able to play the
+    // slot's role, preferring a class not in `used`. Sets slot.guid and
+    // slot.plan.classId; false when the pool has nobody left for the role.
+    bool ClaimCoaSlot(Slot& slot, std::set<std::uint8_t> const& used);
+
+    // How many other characters a CoA slot may try after its first.
+    static constexpr std::uint8_t kCoaRedrawsMax = 4;
+
+    // The classes the other slots field, for a CoA claim's variety.
+    std::set<std::uint8_t> ClassesBesides(std::size_t i) const;
+
     // `_slots` in this job's own pool order, but shuffled off the fill's seed
     // so a substitution is not always the same class in pool-declaration
     // order. Used by both the claim-time fallback and RedrawSlot.
@@ -236,6 +248,9 @@ private:
     // the same death-knight gate the plan was made under.
     std::uint32_t _expansion = 0;
     bool _isAlliance = true;
+    // A Conquest of Azeroth pool (DcPoolBots::PoolHasCoaClasses): the slots
+    // are CoA slots, the class read off the claimed character.
+    bool _coaClasses = false;
 
     // The dungeon set the bots copy, read back post-validation. For a random
     // queue this is the single rDungeonId LFGMgr stored, which is exactly the

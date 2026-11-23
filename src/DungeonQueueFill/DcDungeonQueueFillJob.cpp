@@ -381,8 +381,9 @@ void DcDungeonQueueFillJob::TickPlanning()
         _avoidGuids = last->guids;
     }
 
+    _coaClasses = DcPoolBots::PoolHasCoaClasses(_isAlliance);
     DcDungeonQueueFillPlanner::Result const plan =
-        DcDungeonQueueFillPlanner::Plan(humans, _level, _expansion, _seed, _avoidClasses);
+        DcDungeonQueueFillPlanner::Plan(humans, _level, _expansion, _seed, _avoidClasses, _coaClasses);
     if (plan.kind != DcDungeonQueueFillPlanner::Kind::Ok)
     {
         Release(plan.detail);
@@ -477,6 +478,28 @@ ObjectGuid DcDungeonQueueFillJob::ClaimPoolCharacter(std::uint8_t classId)
                                           [this](ObjectGuid guid) { return HoldsBot(guid); });
 }
 
+bool DcDungeonQueueFillJob::ClaimCoaSlot(Slot& slot, std::set<std::uint8_t> const& used)
+{
+    std::uint8_t classId = 0;
+    ObjectGuid const guid = DcPoolBots::ClaimCoaPoolCharacter(
+        _isAlliance, slot.plan.roleMask, used, _drawState, _avoidGuids,
+        [this](ObjectGuid g) { return HoldsBot(g); }, classId);
+    if (!guid)
+        return false;
+    slot.guid = guid;
+    slot.plan.classId = classId;
+    return true;
+}
+
+std::set<std::uint8_t> DcDungeonQueueFillJob::ClassesBesides(std::size_t i) const
+{
+    std::set<std::uint8_t> used;
+    for (std::size_t j = 0; j < _slots.size(); ++j)
+        if (j != i && _slots[j].guid)
+            used.insert(_slots[j].plan.classId);
+    return used;
+}
+
 // The role pool in a seed-dependent order. Substitutions walked the pool in
 // declaration order, which meant a class with no free character always fell
 // back to the same neighbour — the determinism this feature is trying to shed,
@@ -498,6 +521,45 @@ std::vector<DcTestComp::Slot> DcDungeonQueueFillJob::ShuffledRolePool(
 bool DcDungeonQueueFillJob::RedrawSlot(std::size_t i)
 {
     Slot& slot = _slots[i];
+
+    // A CoA slot: another character, of another class when the pool has one.
+    // A few tries rather than one: the claim cannot know a class's roles
+    // before its character is in the world, so a refused class is learned
+    // (MarkCoaClassUnable) and the next draw skips it.
+    if (slot.plan.anyCoaClass)
+    {
+        if (slot.coaRedraws >= kCoaRedrawsMax)
+            return false;
+        ObjectGuid const previous = slot.guid;
+        std::uint8_t const previousClass = slot.plan.classId;
+        std::set<std::uint8_t> used = ClassesBesides(i);
+        used.insert(previousClass);
+        // Never the character being given back: HoldsBot still counts it.
+        if (!ClaimCoaSlot(slot, used) || slot.guid == previous)
+        {
+            slot.guid = previous;
+            slot.plan.classId = previousClass;
+            return false;
+        }
+        DcPoolBots::ReleaseBot(previous, ObjectAccessor::FindPlayer(previous), /*logout*/ true,
+                               "QUEUEFILL", _id);
+
+        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} re-drawing {} as {} instead of {}", _id,
+                 slot.plan.role, DcBotProvisioning::ClassToken(slot.plan.classId),
+                 DcBotProvisioning::ClassToken(previousClass));
+        ++slot.coaRedraws;
+        slot.name.clear();
+        slot.relocated = false;
+        slot.provisioned = false;
+        slot.sanitized = false;
+        slot.queueSent = false;
+        slot.queued = false;
+        sRandomPlayerbotMgr.AddPlayerBot(slot.guid, 0);
+        _provisionIdx = std::min(_provisionIdx, i);
+        RememberRoster();
+        return true;
+    }
+
     if (slot.redrawn)
         return false;
 
@@ -514,6 +576,11 @@ bool DcDungeonQueueFillJob::RedrawSlot(std::size_t i)
                  _id, slot.plan.role, DcBotProvisioning::ClassToken(alt.classId),
                  DcBotProvisioning::ClassToken(slot.plan.classId));
 
+        // The character being replaced was logged in for this fill: hand it
+        // back, or it stays online with no holder once slot.guid moves on.
+        DcPoolBots::ReleaseBot(slot.guid, ObjectAccessor::FindPlayer(slot.guid), /*logout*/ true,
+                               "QUEUEFILL", _id);
+
         slot.plan.classId = alt.classId;
         slot.plan.specName = alt.specName;
         slot.plan.fallbackSpec = alt.fallbackSpec;
@@ -526,6 +593,7 @@ bool DcDungeonQueueFillJob::RedrawSlot(std::size_t i)
         slot.queued = false;
         slot.redrawn = true;
         sRandomPlayerbotMgr.AddPlayerBot(slot.guid, 0);
+        _provisionIdx = std::min(_provisionIdx, i);
         RememberRoster();
         return true;
     }
@@ -567,8 +635,20 @@ void DcDungeonQueueFillJob::TickClaiming()
     for (Slot const& slot : _slots)
         used.insert(slot.plan.classId);
 
-    for (Slot& slot : _slots)
+    for (std::size_t i = 0; i < _slots.size(); ++i)
     {
+        Slot& slot = _slots[i];
+        if (slot.plan.anyCoaClass)
+        {
+            if (ClaimCoaSlot(slot, ClassesBesides(i)))
+                continue;
+            Release(std::string("no available ") + slot.plan.role +
+                        " character of a CoA class in the addclass pool — pre-seed with "
+                        "`.playerbots addclass`",
+                    /*notifyPlayer*/ true);
+            return;
+        }
+
         slot.guid = ClaimPoolCharacter(slot.plan.classId);
         if (slot.guid)
             continue;
@@ -724,6 +804,10 @@ void DcDungeonQueueFillJob::TickProvisioning()
         return;
     }
 
+    // A slot re-drawn after its turn (the queue-time redraw) is provisioned
+    // again: RedrawSlot moves the index back to it.
+    while (_provisionIdx < _slots.size() && _slots[_provisionIdx].provisioned)
+        ++_provisionIdx;
     if (_provisionIdx >= _slots.size())
     {
         EnterStage(Stage::Sanitizing);
@@ -735,6 +819,41 @@ void DcDungeonQueueFillJob::TickProvisioning()
     PlayerbotAI* const botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
     if (!bot || !bot->IsInWorld() || !botAI)
         return;  // transient (mid world-add) — the stage timeout bounds the wait
+
+    if (slot.plan.anyCoaClass)
+    {
+        if (!DcProvisionBudget::Take())
+            return;
+
+        // Rolled like any slot (level, gear under the fill's ceiling), with no
+        // premade template: the CoA classes have none. The role comes after,
+        // from the class's own specializations, because the roll picks a
+        // specialization of its own.
+        DcBotProvisioning::Roll(bot, _level, _gearQuality, _gearScoreLimit, -1);
+        if (!DcPoolBots::SwitchCoaRole(bot, slot.plan.roleMask))
+        {
+            DcPoolBots::MarkCoaClassUnable(slot.plan.classId, slot.plan.roleMask);
+            LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} {} ({}) cannot play {}", _id,
+                     bot->GetName(), DcBotProvisioning::ClassToken(slot.plan.classId), slot.plan.role);
+            if (RedrawSlot(_provisionIdx))
+            {
+                EnterStage(Stage::LoggingIn);
+                return;
+            }
+            Release(std::string("no character of a CoA class in the addclass pool can play the ") +
+                        slot.plan.role,
+                    /*notifyPlayer*/ true);
+            return;
+        }
+
+        LOG_INFO("playerbots.dungeonclear",
+                 "QUEUEFILL {} provisioned {} ({} {}, level {}, gear <= ilvl {})", _id, bot->GetName(),
+                 DcBotProvisioning::ClassToken(slot.plan.classId), slot.plan.role, bot->GetLevel(),
+                 _gearIlvl ? std::to_string(_gearIlvl) : std::string("unlimited"));
+        slot.provisioned = true;
+        ++_provisionIdx;
+        return;
+    }
 
     std::string pickedSpec;
     int const specNo = DcBotProvisioning::ResolveSpecNo(slot.plan.classId, slot.plan.specName,
