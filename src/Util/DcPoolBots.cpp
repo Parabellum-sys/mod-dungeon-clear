@@ -289,7 +289,7 @@ namespace DcPoolBots
         DcRunTravelGuard::AllowScope const allow;
         if (!bot->TeleportTo(spot.map, spot.x, spot.y, spot.z, spot.o))
         {
-            LOG_WARN("playerbots.dungeonclear",
+            LOG_WARN("playerbots.dungeonclear.queuefill",
                      "{} {} could not move {} to {} (map {}) from map {} — retrying", logTag, jobId,
                      bot->GetName(), CapitalName(alliance), spot.map, bot->GetMapId());
         }
@@ -364,7 +364,7 @@ namespace DcPoolBots
         if (sRandomPlayerbotMgr.GetPlayerBot(guid))
             sRandomPlayerbotMgr.LogoutPlayerBot(guid);
         else if (ObjectAccessor::FindConnectedPlayer(guid))
-            LOG_WARN("playerbots.dungeonclear",
+            LOG_WARN("playerbots.dungeonclear.queuefill",
                      "{} {} bot {} is online but owned by no holder — left logged in", logTag,
                      jobId, guid.ToString());
     }

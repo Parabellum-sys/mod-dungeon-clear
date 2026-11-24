@@ -162,7 +162,7 @@ void DcDungeonQueueFillManager::OnQueueIntent(Player* player, std::uint8_t roles
         if (transient)
         {
             Defer(player);
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "QUEUEFILL deferring {}'s queue: {} — will retry while they wait",
                      player->GetName(), refusal);
             return;
@@ -172,10 +172,10 @@ void DcDungeonQueueFillManager::OnQueueIntent(Player* player, std::uint8_t roles
         // is on by default and turns the fill off with nothing in the config
         // to say so.
         if (refusal.rfind(kTooManyHumans, 0) == 0)
-            LOG_INFO("playerbots.dungeonclear", "QUEUEFILL not filling {}'s queue: {}",
+            LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL not filling {}'s queue: {}",
                      player->GetName(), refusal);
         else
-            LOG_DEBUG("playerbots.dungeonclear", "QUEUEFILL declining {}'s queue: {}",
+            LOG_DEBUG("playerbots.dungeonclear.queuefill", "QUEUEFILL declining {}'s queue: {}",
                       player->GetName(), refusal);
         return;
     }
@@ -316,7 +316,7 @@ void DcDungeonQueueFillManager::TickDeferred(std::uint32_t diff)
                 continue;
             }
 
-            LOG_DEBUG("playerbots.dungeonclear",
+            LOG_DEBUG("playerbots.dungeonclear.queuefill",
                       "QUEUEFILL giving up on {}'s deferred queue after {}s: {}",
                       player->GetName(), it->sinceMs / 1000, refusal);
             it = _deferred.erase(it);
@@ -327,7 +327,7 @@ void DcDungeonQueueFillManager::TickDeferred(std::uint32_t diff)
             DcDungeonQueueFillJob::Observe(player, sLFGMgr->GetRoles(player->GetGUID()), dungeons);
         if (job)
         {
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "QUEUEFILL {} opening {}'s deferred fill — room freed up after {}s",
                      job->Id(), player->GetName(), it->sinceMs / 1000);
             _jobs.push_back(std::move(job));
@@ -373,7 +373,7 @@ void DcDungeonQueueFillManager::OnBotProposal(Player* bot, WorldPacket const& pa
     sLFGMgr->UpdateProposal(proposalId, bot->GetGUID(), true);
     _inProposalAccept = false;
 
-    LOG_DEBUG("playerbots.dungeonclear", "QUEUEFILL accepted proposal {} for {}", proposalId,
+    LOG_DEBUG("playerbots.dungeonclear.queuefill", "QUEUEFILL accepted proposal {} for {}", proposalId,
               bot->GetName());
 }
 

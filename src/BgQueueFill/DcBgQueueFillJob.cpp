@@ -190,7 +190,7 @@ std::unique_ptr<DcBgQueueFillJob> DcBgQueueFillJob::Observe(Player* player, std:
     job->_isRandom = bgTypeId == BATTLEGROUND_RB;
     job->_demoted = demoted;
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "BGQUEUEFILL {} observed {} (level {}, {}) queueing for {}{}", job->_id,
              job->_playerName, job->_level, DcBgQueueFillPlanner::TeamName(job->_team),
              BgName(bgTypeId), demoted ? " — premade group moved to the normal queue" : "");
@@ -500,7 +500,7 @@ void DcBgQueueFillJob::TickPlanning()
     }
 
     auto const [lo, hi] = DcBgQueueFillPlanner::LevelWindow(req);
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "BGQUEUEFILL {} plan: {} bracket {}-{}, {}v{} (pops at {}), levels {}-{}; Alliance {} "
              "present + {} in flight, +{} bot(s) ({} start-critical, {} healers); Horde {} present "
              "+ {} in flight, +{} bot(s) ({} start-critical, {} healers); shortfall A{} H{} (seed {})",
@@ -552,7 +552,7 @@ void DcBgQueueFillJob::TickPlayer()
         }
         _bgInstanceId = bg->GetInstanceID();
         EnterStage(Stage::InBattle);
-        LOG_INFO("playerbots.dungeonclear",
+        LOG_INFO("playerbots.dungeonclear.queuefill",
                  "BGQUEUEFILL {} {} entered {} (instance {}) — {} bot(s) queued, {} still setting up",
                  _id, _playerName, BgName(bg->GetBgTypeID(true)), _bgInstanceId,
                  CountSlots(SlotStage::Queued),
@@ -584,7 +584,7 @@ void DcBgQueueFillJob::TickPlayer()
         if (_stage == Stage::Filling)
         {
             EnterStage(Stage::Waiting);
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "BGQUEUEFILL {} match popped for {} after {}s — {} bot(s) queued", _id,
                      _playerName, _totalMs / 1000, CountSlots(SlotStage::Queued));
         }
@@ -595,7 +595,7 @@ void DcBgQueueFillJob::TickPlayer()
     else if (_stage == Stage::Filling && AllCriticalQueued())
     {
         EnterStage(Stage::Waiting);
-        LOG_INFO("playerbots.dungeonclear",
+        LOG_INFO("playerbots.dungeonclear.queuefill",
                  "BGQUEUEFILL {} every start-critical bot is queued after {}s — waiting for the pop",
                  _id, _totalMs / 1000);
     }
@@ -625,7 +625,7 @@ void DcBgQueueFillJob::TickInBattle(std::uint32_t diff)
     if (bg->GetStatus() == STATUS_WAIT_LEAVE)
     {
         if (!_endedMs)
-            LOG_INFO("playerbots.dungeonclear", "BGQUEUEFILL {} {} ended after {}s", _id,
+            LOG_INFO("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} {} ended after {}s", _id,
                      BgName(bg->GetBgTypeID(true)), _stageMs / 1000);
         _endedMs += std::max<std::uint32_t>(diff, 1);
 
@@ -769,7 +769,7 @@ void DcBgQueueFillJob::TickSlotClaiming(std::size_t i, std::uint32_t& loggingIn)
                 ++dropped;
             }
         if (dropped)
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "BGQUEUEFILL {} {} {} pool is dry — {} more slot(s) dropped; the match runs short",
                      _id, DcBgQueueFillPlanner::TeamName(slot.plan.team), slot.plan.role, dropped);
         return;
@@ -838,7 +838,7 @@ bool DcBgQueueFillJob::TickSlotProvisioning(std::size_t i)
 
     DcBotProvisioning::Roll(bot, slot.plan.level, _gearQuality, _gearScoreLimit, specNo);
 
-    LOG_DEBUG("playerbots.dungeonclear",
+    LOG_DEBUG("playerbots.dungeonclear.queuefill",
               "BGQUEUEFILL {} provisioned {} ({} {} {} {}, level {}, gear <= ilvl {})", _id,
               bot->GetName(), DcBgQueueFillPlanner::TeamName(slot.plan.team),
               DcBotProvisioning::ClassToken(slot.plan.classId),
@@ -864,7 +864,7 @@ void DcBgQueueFillJob::TickSlotSanitizing(Slot& slot)
     // The join handler refuses a death knight standing on Acherus without
     // Death Gate; the chain credit and the travel unlock clear both halves.
     if (DcPoolBots::CreditDeathKnightChain(bot))
-        LOG_DEBUG("playerbots.dungeonclear", "BGQUEUEFILL {} credited {} with the death-knight chain",
+        LOG_DEBUG("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} credited {} with the death-knight chain",
                   _id, bot->GetName());
     DcDungeonAccess::UnlockTravel(bot);
 
@@ -951,7 +951,7 @@ void DcBgQueueFillJob::TickSlotQueued(Slot& slot)
     if (++slot.requeues > kMaxRequeues)
         return;
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "BGQUEUEFILL {} {} fell out of the queue — re-queueing (attempt {} of {})", _id,
              slot.name.empty() ? bot->GetName() : slot.name, slot.requeues, kMaxRequeues);
     ResurrectAndCalm(bot);
@@ -1001,7 +1001,7 @@ void DcBgQueueFillJob::TickInvites(std::uint32_t diff)
                 if (want && !botAI->HasStrategy(want, BOT_STATE_NON_COMBAT))
                 {
                     botAI->ResetStrategies(false);
-                    LOG_DEBUG("playerbots.dungeonclear",
+                    LOG_DEBUG("playerbots.dungeonclear.queuefill",
                               "BGQUEUEFILL {} reset {}'s strategies inside the battleground", _id,
                               bot->GetName());
                 }
@@ -1030,7 +1030,7 @@ void DcBgQueueFillJob::TickInvites(std::uint32_t diff)
         // but only after that check.
         ResurrectAndCalm(bot);
         DcBgQueueFillManager::QueuePortPacket(bot, 0, _bgTypeId, 1);
-        LOG_DEBUG("playerbots.dungeonclear", "BGQUEUEFILL {} accepting the invite for {} ({}s unanswered)",
+        LOG_DEBUG("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} accepting the invite for {} ({}s unanswered)",
                   _id, bot->GetName(), slot.invitedMs / 1000);
     }
 }
@@ -1082,7 +1082,7 @@ void DcBgQueueFillJob::FailSlot(std::size_t i, std::string const& reason)
         return;
     }
 
-    LOG_INFO("playerbots.dungeonclear", "BGQUEUEFILL {} dropping a {} {} slot{}: {}", _id,
+    LOG_INFO("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} dropping a {} {} slot{}: {}", _id,
              DcBgQueueFillPlanner::TeamName(slot.plan.team), slot.plan.role,
              slot.name.empty() ? "" : " (" + slot.name + ")", reason);
 
@@ -1108,7 +1108,7 @@ bool DcBgQueueFillJob::RedrawSlot(std::size_t i)
         return false;
     }
 
-    LOG_INFO("playerbots.dungeonclear", "BGQUEUEFILL {} re-drawing a {} {} as {} instead of {}", _id,
+    LOG_INFO("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} re-drawing a {} {} as {} instead of {}", _id,
              DcBgQueueFillPlanner::TeamName(slot.plan.team), slot.plan.role,
              DcBotProvisioning::ClassToken(slot.plan.classId), DcBotProvisioning::ClassToken(oldClass));
 
@@ -1151,7 +1151,7 @@ void DcBgQueueFillJob::MaybeTopUp(Battleground* bg)
     std::uint32_t const max = bg->GetMaxPlayersPerTeam();
     if (max <= _maxPerTeam)
     {
-        LOG_INFO("playerbots.dungeonclear",
+        LOG_INFO("playerbots.dungeonclear.queuefill",
                  "BGQUEUEFILL {} Random rolled {} — the {}v{} pop is already full size", _id,
                  BgName(concrete), _maxPerTeam, _maxPerTeam);
         return;
@@ -1207,7 +1207,7 @@ void DcBgQueueFillJob::MaybeTopUp(Battleground* bg)
     }
     if (plan.kind != DcBgQueueFillPlanner::Kind::Ok)
     {
-        LOG_INFO("playerbots.dungeonclear", "BGQUEUEFILL {} Random rolled {} — no top-up: {}", _id,
+        LOG_INFO("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} Random rolled {} — no top-up: {}", _id,
                  BgName(concrete), plan.detail);
         return;
     }
@@ -1221,7 +1221,7 @@ void DcBgQueueFillJob::MaybeTopUp(Battleground* bg)
     _minPerTeam = req.minPerTeam;
     _maxPerTeam = max;
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "BGQUEUEFILL {} Random rolled {} — topping up to {}v{}: Alliance +{}, Horde +{} "
              "(shortfall A{} H{})",
              _id, BgName(concrete), max, max, plan.planned[0], plan.planned[1], plan.shortfall[0],
@@ -1255,7 +1255,7 @@ void DcBgQueueFillJob::TickReleasing()
                 .PSendSysMessage("|cffff8000[Battleground]|r Could not fill your battleground this "
                                  "time — you are still queued normally.");
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "BGQUEUEFILL {} released after {}s — {} (bots queued: Alliance {}, Horde {})", _id,
              _totalMs / 1000, _releaseReason.empty() ? "done" : _releaseReason, queued[0], queued[1]);
     EnterStage(Stage::Done);

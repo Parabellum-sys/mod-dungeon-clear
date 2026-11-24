@@ -207,7 +207,7 @@ void DcBgQueueFillManager::OnAddGroup(BattlegroundQueue* queue, std::uint32_t& i
         if (OpposingHumanPremadeQueued(*queue, bracketEntry->GetBracketId(), SideOf(leader)))
         {
             pj.premade = true;
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "BGQUEUEFILL leaving {}'s premade group in the premade queue — an opposing human "
                      "premade is already waiting",
                      leader->GetName());
@@ -247,12 +247,12 @@ void DcBgQueueFillManager::OnPlayerJoinBG(Player* player)
         if (transient)
         {
             Defer(player, pj.bgTypeId);
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "BGQUEUEFILL deferring {}'s battleground queue: {} — will retry while they wait",
                      player->GetName(), refusal);
             return;
         }
-        LOG_DEBUG("playerbots.dungeonclear", "BGQUEUEFILL declining {}'s battleground queue: {}",
+        LOG_DEBUG("playerbots.dungeonclear.queuefill", "BGQUEUEFILL declining {}'s battleground queue: {}",
                   player->GetName(), refusal);
         return;
     }
@@ -356,7 +356,7 @@ void DcBgQueueFillManager::ReleaseBot(ObjectGuid guid, bool logout, bool force, 
             if (std::none_of(_orphans.begin(), _orphans.end(),
                              [guid](Orphan const& o) { return o.guid == guid; }))
                 _orphans.push_back(Orphan{guid, jobId, 0, logout});
-            LOG_DEBUG("playerbots.dungeonclear",
+            LOG_DEBUG("playerbots.dungeonclear.queuefill",
                       "BGQUEUEFILL {} leaving {} in its match — real players are still playing it",
                       jobId, bot->GetName());
             return;
@@ -409,7 +409,7 @@ void DcBgQueueFillManager::TickOrphans(std::uint32_t diff)
             continue;
         }
 
-        LOG_DEBUG("playerbots.dungeonclear", "BGQUEUEFILL {} releasing {} — its match is over", it->jobId,
+        LOG_DEBUG("playerbots.dungeonclear.queuefill", "BGQUEUEFILL {} releasing {} — its match is over", it->jobId,
                   bot->GetName());
         Orphan const o = *it;
         it = _orphans.erase(it);
@@ -474,7 +474,7 @@ void DcBgQueueFillManager::TickDeferred(std::uint32_t diff)
                 ++it;
                 continue;
             }
-            LOG_DEBUG("playerbots.dungeonclear", "BGQUEUEFILL giving up on {}'s deferred queue after {}s: {}",
+            LOG_DEBUG("playerbots.dungeonclear.queuefill", "BGQUEUEFILL giving up on {}'s deferred queue after {}s: {}",
                       player->GetName(), it->sinceMs / 1000, refusal);
             it = _deferred.erase(it);
             continue;
@@ -493,7 +493,7 @@ void DcBgQueueFillManager::TickDeferred(std::uint32_t diff)
             GroupQueueInfo* const ginfo = qit->second;
             if (OpposingHumanPremadeQueued(queue, ginfo->BracketId, ginfo->teamId == TEAM_ALLIANCE ? 0 : 1))
             {
-                LOG_INFO("playerbots.dungeonclear",
+                LOG_INFO("playerbots.dungeonclear.queuefill",
                          "BGQUEUEFILL not filling {}'s deferred premade — an opposing human premade is waiting",
                          player->GetName());
                 it = _deferred.erase(it);
@@ -502,7 +502,7 @@ void DcBgQueueFillManager::TickDeferred(std::uint32_t diff)
             demoted = DemoteQueuedGroup(queue, ginfo);
         }
 
-        LOG_INFO("playerbots.dungeonclear", "BGQUEUEFILL opening {}'s deferred fill — room freed up after {}s",
+        LOG_INFO("playerbots.dungeonclear.queuefill", "BGQUEUEFILL opening {}'s deferred fill — room freed up after {}s",
                  player->GetName(), it->sinceMs / 1000);
         std::uint32_t const bgTypeId = it->bgTypeId;
         it = _deferred.erase(it);
@@ -516,7 +516,7 @@ void DcBgQueueFillManager::WarnOnConflictingConfig() const
 {
     if (!DC_PB_CONFIG(RandomBotJoinBG, randomBotJoinBG) && !DC_PB_CONFIG(RandomBotAutoJoinBG, randomBotAutoJoinBG))
         return;
-    LOG_WARN("playerbots.dungeonclear",
+    LOG_WARN("playerbots.dungeonclear.queuefill",
              "BGQUEUEFILL is on while Playerbots.RandomBotJoinBG={} / RandomBotAutoJoinBG={}: random "
              "bots queue themselves into battlegrounds independently and will double-fill matches. "
              "Set both to 0.",

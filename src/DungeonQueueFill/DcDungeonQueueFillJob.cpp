@@ -115,7 +115,7 @@ std::unique_ptr<DcDungeonQueueFillJob> DcDungeonQueueFillJob::Observe(
     job->_groupGuid = grp ? grp->GetGUID() : ObjectGuid::Empty;
     job->_lfgGuid = grp ? grp->GetGUID() : player->GetGUID();
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "QUEUEFILL {} observed {} (level {}, {}) queueing for {} dungeon(s) as {}",
              job->_id, job->_playerName, job->_level, job->_isAlliance ? "Alliance" : "Horde",
              dungeons.size(), RoleMaskText(roles));
@@ -425,7 +425,7 @@ void DcDungeonQueueFillJob::TickPlanning()
         avoided += DcBotProvisioning::ClassToken(classId);
     }
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "QUEUEFILL {} plan: {} human(s) playing {}, {} dungeon(s) [{}], needs {} bot(s) — {}"
              " (seed {}, avoiding last party {})",
              _id, humans.size(), played, _dungeons.size(), ids, _slots.size(), wanted, _seed,
@@ -544,7 +544,7 @@ bool DcDungeonQueueFillJob::RedrawSlot(std::size_t i)
         DcPoolBots::ReleaseBot(previous, ObjectAccessor::FindPlayer(previous), /*logout*/ true,
                                "QUEUEFILL", _id);
 
-        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} re-drawing {} as {} instead of {}", _id,
+        LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} re-drawing {} as {} instead of {}", _id,
                  slot.plan.role, DcBotProvisioning::ClassToken(slot.plan.classId),
                  DcBotProvisioning::ClassToken(previousClass));
         ++slot.coaRedraws;
@@ -572,7 +572,7 @@ bool DcDungeonQueueFillJob::RedrawSlot(std::size_t i)
         if (!guid)
             continue;
 
-        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} re-drawing {} as {} instead of {}",
+        LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} re-drawing {} as {} instead of {}",
                  _id, slot.plan.role, DcBotProvisioning::ClassToken(alt.classId),
                  DcBotProvisioning::ClassToken(slot.plan.classId));
 
@@ -781,7 +781,7 @@ void DcDungeonQueueFillJob::TickEvicting()
 
     if (allPlaced)
     {
-        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} placed {} bot(s) in {}", _id,
+        LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} placed {} bot(s) in {}", _id,
                  _slots.size(), DcPoolBots::CapitalName(_isAlliance));
         EnterStage(Stage::Provisioning);
         return;
@@ -833,7 +833,7 @@ void DcDungeonQueueFillJob::TickProvisioning()
         if (!DcPoolBots::SwitchCoaRole(bot, slot.plan.roleMask))
         {
             DcPoolBots::MarkCoaClassUnable(slot.plan.classId, slot.plan.roleMask);
-            LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} {} ({}) cannot play {}", _id,
+            LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} {} ({}) cannot play {}", _id,
                      bot->GetName(), DcBotProvisioning::ClassToken(slot.plan.classId), slot.plan.role);
             if (RedrawSlot(_provisionIdx))
             {
@@ -846,7 +846,7 @@ void DcDungeonQueueFillJob::TickProvisioning()
             return;
         }
 
-        LOG_INFO("playerbots.dungeonclear",
+        LOG_INFO("playerbots.dungeonclear.queuefill",
                  "QUEUEFILL {} provisioned {} ({} {}, level {}, gear <= ilvl {})", _id, bot->GetName(),
                  DcBotProvisioning::ClassToken(slot.plan.classId), slot.plan.role, bot->GetLevel(),
                  _gearIlvl ? std::to_string(_gearIlvl) : std::string("unlimited"));
@@ -880,7 +880,7 @@ void DcDungeonQueueFillJob::TickProvisioning()
 
     DcBotProvisioning::Roll(bot, _level, _gearQuality, _gearScoreLimit, specNo);
 
-    LOG_INFO("playerbots.dungeonclear",
+    LOG_INFO("playerbots.dungeonclear.queuefill",
              "QUEUEFILL {} provisioned {} ({} {} {}, level {}, gear <= ilvl {})", _id,
              bot->GetName(), DcBotProvisioning::ClassToken(slot.plan.classId),
              specNo >= 0 ? pickedSpec : std::string("(random)"), slot.plan.role, bot->GetLevel(),
@@ -931,7 +931,7 @@ void DcDungeonQueueFillJob::TickSanitizing()
         // queue, and the refusal it causes is silent (JoinLfg answers the
         // BOT's session, so the fill just sits in queueing until it times out).
         if (DcPoolBots::CreditDeathKnightChain(bot))
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "QUEUEFILL {} credited {} with the death-knight starting chain (LFG lock)",
                      _id, bot->GetName());
 
@@ -1027,7 +1027,7 @@ void DcDungeonQueueFillJob::TickQueueing()
 
     if (allQueued)
     {
-        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} all {} bot(s) queued for {}", _id,
+        LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} all {} bot(s) queued for {}", _id,
                  _slots.size(), _playerName);
         EnterStage(Stage::Waiting);
         return;
@@ -1104,7 +1104,7 @@ std::size_t DcDungeonQueueFillJob::RequeueDroppedBots()
         slot.queued = false;
         slot.queueSent = false;
 
-        LOG_INFO("playerbots.dungeonclear",
+        LOG_INFO("playerbots.dungeonclear.queuefill",
                  "QUEUEFILL {} {} ({}) was dropped from the queue — sanitising and re-queueing "
                  "(attempt {} of {})",
                  _id, slot.name.empty() ? bot->GetName() : slot.name, slot.plan.role,
@@ -1167,7 +1167,7 @@ void DcDungeonQueueFillJob::TickWaiting()
             Release("the proposal failed twice", /*notifyPlayer*/ true);
             return;
         }
-        LOG_INFO("playerbots.dungeonclear",
+        LOG_INFO("playerbots.dungeonclear.queuefill",
                  "QUEUEFILL {} proposal failed; the core has re-queued — waiting once more", _id);
     }
 
@@ -1209,7 +1209,7 @@ void DcDungeonQueueFillJob::HandOffGroup(Group* grp)
     if (leaderIsOurs)
     {
         grp->ChangeLeader(_playerGuid);
-        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} moved group leader to {}", _id,
+        LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} moved group leader to {}", _id,
                  _playerName);
     }
 
@@ -1224,7 +1224,7 @@ void DcDungeonQueueFillJob::HandOffGroup(Group* grp)
         grp->SendUpdate();
     }
 
-    LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} formed: {} + {} bot(s) — handing off", _id,
+    LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} formed: {} + {} bot(s) — handing off", _id,
              _playerName, _slots.size());
 }
 
@@ -1287,13 +1287,13 @@ void DcDungeonQueueFillJob::TickFormed()
                     DungeonWingRegistry::WingForLfgDungeon(tank->GetMapId(), lfgDungeon))
             {
                 DcRunWing::Set(tank, *wing, DcRunWing::Source::Lfg);
-                LOG_INFO("playerbots.dungeonclear",
+                LOG_INFO("playerbots.dungeonclear.queuefill",
                          "QUEUEFILL {} AutoClear: LFG dungeon {} -> run wing '{}'", _id,
                          lfgDungeon, wing->token);
             }
             tankAI->DoSpecificAction("dc on", Event("dc", "", player), true);
             _autoClearIssued = true;
-            LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} AutoClear: issued `dc on` to {}",
+            LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} AutoClear: issued `dc on` to {}",
                      _id, tank->GetName());
             break;
         }
@@ -1325,7 +1325,7 @@ void DcDungeonQueueFillJob::TickReleasing()
         // break that player's dungeon to tidy up ours.
         if (bot && BotIsSomebodyElses(bot))
         {
-            LOG_INFO("playerbots.dungeonclear",
+            LOG_INFO("playerbots.dungeonclear.queuefill",
                      "QUEUEFILL {} leaving {} where it is — matched into another group", _id,
                      bot->GetName());
             continue;
@@ -1346,10 +1346,10 @@ void DcDungeonQueueFillJob::TickReleasing()
     // A release the player was told about is a failure they saw: WARN, so the
     // reason survives the default Logger.playerbots level.
     if (_notifyPlayer)
-        LOG_WARN("playerbots.dungeonclear", "QUEUEFILL {} released after {}s — {}", _id,
+        LOG_WARN("playerbots.dungeonclear.queuefill", "QUEUEFILL {} released after {}s — {}", _id,
                  _totalMs / 1000, _releaseReason.empty() ? "done" : _releaseReason);
     else
-        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} released after {}s — {}", _id,
+        LOG_INFO("playerbots.dungeonclear.queuefill", "QUEUEFILL {} released after {}s — {}", _id,
                  _totalMs / 1000, _releaseReason.empty() ? "done" : _releaseReason);
     EnterStage(Stage::Done);
 }

@@ -771,6 +771,13 @@ DungeonClear.TrashWidthCap = 30.0
 #
 #    Appender.DungeonClearPull=2,5,0,DungeonClearPull.log
 #    Logger.playerbots.dungeonclear.pull=5,DungeonClearPull
+#
+#    The dungeon finder and battleground fills (QUEUEFILL / BGQUEUEFILL
+#    lines) log to their own child category, playerbots.dungeonclear.queuefill,
+#    so a server can keep them at Info without the dungeon AI's per-bot
+#    lines. Commented out, they inherit the parent channel above.
+#
+#    Logger.playerbots.dungeonclear.queuefill=4,DungeonClear
 
 ########################################
 # ADVANCED PATHING SETTINGS
