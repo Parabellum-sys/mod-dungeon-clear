@@ -1997,7 +1997,11 @@ DungeonClear.SelfFound.DiagWarn = 0
 #   builds the LFG group, applies the Dungeon Finder buff and teleports
 #   everyone in. Nothing about the client flow changes — no addon, no command.
 #
-#   This changes realm-wide behaviour, so it is OFF by default.
+#   This changes realm-wide behaviour, so by default it runs only while the
+#   realm is small: below DungeonQueueFill.MaxHumansOnline real players online
+#   (5). From there on, players can make parties of their own and the bots
+#   stop taking their places in the queue. Enable = 1 forces it on whatever
+#   the count; Enable = 0 and MaxHumansOnline = 0 turn it off.
 #
 #   The battleground counterpart is DungeonClear.BgQueueFill.* below — a
 #   separate feature with its own switch.
@@ -2005,16 +2009,34 @@ DungeonClear.SelfFound.DiagWarn = 0
 
 #
 #    DungeonClear.DungeonQueueFill.Enable
-#        Master switch. 0 = the dungeon finder behaves exactly as it does
-#        without this module.
+#        1 = always on, however many players are online.
+#        0 = on only while fewer than DungeonQueueFill.MaxHumansOnline real
+#            players are online (see below).
 #
-#        Turning it off while fills are in flight releases them (the bots
-#        leave the queue and log out); it never strands a queued bot.
+#        Turning the feature off (Enable = 0 and MaxHumansOnline = 0) while
+#        fills are in flight releases them (the bots leave the queue and log
+#        out); it never strands a queued bot.
 #
-#        Default: 0 (off)
+#        Default: 0 (automatic)
 #
 
 DungeonClear.DungeonQueueFill.Enable = 0
+
+#
+#    DungeonClear.DungeonQueueFill.MaxHumansOnline
+#        With Enable = 0, the fill runs while fewer than this many real
+#        players are online (bots not counted, the queueing player counted).
+#        It is checked when a player queues: a party already formed is never
+#        undone because more players logged in. A queue it lets pass is
+#        logged ("QUEUEFILL not filling ...: too many players online").
+#
+#        0 = never on by itself; then only Enable = 1 turns the fill on, and
+#        the dungeon finder behaves exactly as it does without this module.
+#
+#        Default: 5
+#
+
+DungeonClear.DungeonQueueFill.MaxHumansOnline = 5
 
 #
 #    DungeonClear.DungeonQueueFill.MaxConcurrent

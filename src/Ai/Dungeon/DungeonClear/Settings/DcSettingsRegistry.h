@@ -894,6 +894,8 @@ inline constexpr DcSettingDef kDcSettings[] =
     // operator must be able to run dungeon fill without battleground fill.
     // Nothing is ever named plain QueueFill.
     { "DungeonQueueFill.Enable",          DcType::Bool,   0,  0,      1, false },
+    // On by itself below this many real players online; 0 = Enable alone.
+    { "DungeonQueueFill.MaxHumansOnline", DcType::UInt,   5,  0,   1000, false },
     // Bounds the fills SETTING UP, not the parties out — see the conf.dist.
     { "DungeonQueueFill.MaxConcurrent",   DcType::UInt,   3,  0,    100, false },
     { "DungeonQueueFill.SetupTimeoutSec", DcType::UInt,  60, 10,    600, false },

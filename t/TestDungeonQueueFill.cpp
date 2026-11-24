@@ -741,3 +741,39 @@ TEST(DcDungeonQueueFillPlanner, PickCoaCandidateReplaysFromItsSeed)
     for (int n = 0; n < 10; ++n)
         EXPECT_EQ(PickCoaCandidate(classes, {}, {}, a), PickCoaCandidate(classes, {}, {}, b));
 }
+
+// ---- the player threshold (DungeonQueueFill.MaxHumansOnline) ---------------
+
+TEST(DcDungeonQueueFillPlanner, FillOpensBelowThePlayerThreshold)
+{
+    // Default settings: Enable 0, MaxHumansOnline 5.
+    EXPECT_TRUE(FillOpen(false, 5, 0));
+    EXPECT_TRUE(FillOpen(false, 5, 4));
+    EXPECT_FALSE(FillOpen(false, 5, 5));
+    EXPECT_FALSE(FillOpen(false, 5, 6));
+    EXPECT_TRUE(FillPossible(false, 5));
+}
+
+TEST(DcDungeonQueueFillPlanner, EnableForcesTheFillWhateverTheCount)
+{
+    for (std::uint32_t const humans : {0u, 4u, 5u, 6u, 500u})
+    {
+        EXPECT_TRUE(FillOpen(true, 5, humans)) << humans;
+        EXPECT_TRUE(FillOpen(true, 0, humans)) << humans;
+    }
+    EXPECT_TRUE(FillPossible(true, 0));
+}
+
+TEST(DcDungeonQueueFillPlanner, ZeroThresholdLeavesEnableAlone)
+{
+    for (std::uint32_t const humans : {0u, 4u, 5u, 6u})
+        EXPECT_FALSE(FillOpen(false, 0, humans)) << humans;
+    EXPECT_FALSE(FillPossible(false, 0));
+}
+
+TEST(DcDungeonQueueFillPlanner, ThresholdOfOneMeansNoOneElseOnline)
+{
+    // The queueing player counts, so a threshold of 1 never opens.
+    EXPECT_FALSE(FillOpen(false, 1, 1));
+    EXPECT_TRUE(FillOpen(false, 2, 1));
+}

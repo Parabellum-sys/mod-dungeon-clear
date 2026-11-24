@@ -18,6 +18,7 @@
 
 #include "DcModuleEnable.h"
 #include "DungeonQueueFill/DcDungeonQueueFillJob.h"
+#include "DungeonQueueFill/DcDungeonQueueFillPlanner.h"
 #include "Ai/Dungeon/DungeonClear/Settings/DcSettings.h"
 
 using namespace lfg;
@@ -46,6 +47,22 @@ bool DcDungeonQueueFillManager::HasJobFor(Player* player) const
     return false;
 }
 
+std::uint32_t DcDungeonQueueFillManager::CountHumansOnline()
+{
+    // Real players: every player in the world but the bots, a selfbot counted
+    // as the person at its keyboard. One pass per queue click, not per tick.
+    std::uint32_t humans = 0;
+    for (auto const& [guid, player] : ObjectAccessor::GetPlayers())
+    {
+        if (!player || !player->IsInWorld())
+            continue;
+        if (GET_PLAYERBOT_AI(player) && !IsSelfBot(player))
+            continue;
+        ++humans;
+    }
+    return humans;
+}
+
 // Why this intent is not ours to act on. Empty = accepted.
 //
 // Every refusal is a plain sentence, including the ordinary ones ("feature
@@ -62,8 +79,11 @@ std::string DcDungeonQueueFillManager::RefuseReason(Player* player,
 
     if (!DcModule::IsEnabled())
         return "module disabled";
-    if (!DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable"))
-        return "DungeonQueueFill.Enable is off";
+    bool const enable = DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable");
+    std::uint32_t const maxHumans =
+        DcSettings::GetUInt(ObjectGuid::Empty, "DungeonQueueFill.MaxHumansOnline");
+    if (!DcDungeonQueueFillPlanner::FillPossible(enable, maxHumans))
+        return "DungeonQueueFill.Enable and DungeonQueueFill.MaxHumansOnline are both 0";
 
     // A bot queueing is the stock RandomBotJoinLfg behaviour and none of our
     // business; filling around one would also let two fills chase each other.
@@ -74,6 +94,17 @@ std::string DcDungeonQueueFillManager::RefuseReason(Player* player,
     // exists for. Testing GET_PLAYERBOT_AI alone refused every one of them.
     if (GET_PLAYERBOT_AI(player) && !IsSelfBot(player))
         return "queuing character is a bot";
+
+    // After the bot test: a bot queueing is refused for what it is, not
+    // counted against the realm. Asked only when a player queues — a fill
+    // already in flight is never undone because the realm filled up since.
+    if (!enable)
+    {
+        std::uint32_t const humans = CountHumansOnline();
+        if (!DcDungeonQueueFillPlanner::FillOpen(enable, maxHumans, humans))
+            return std::string(kTooManyHumans) + " (" + std::to_string(humans) + " online, fill only below " +
+                   std::to_string(maxHumans) + ")";
+    }
 
     std::uint32_t const minLevel =
         DcSettings::GetUInt(ObjectGuid::Empty, "DungeonQueueFill.MinPlayerLevel");
@@ -137,8 +168,15 @@ void DcDungeonQueueFillManager::OnQueueIntent(Player* player, std::uint8_t roles
             return;
         }
 
-        LOG_DEBUG("playerbots.dungeonclear", "QUEUEFILL declining {}'s queue: {}",
-                  player->GetName(), refusal);
+        // The player threshold is the one ordinary refusal logged at INFO: it
+        // is on by default and turns the fill off with nothing in the config
+        // to say so.
+        if (refusal.rfind(kTooManyHumans, 0) == 0)
+            LOG_INFO("playerbots.dungeonclear", "QUEUEFILL not filling {}'s queue: {}",
+                     player->GetName(), refusal);
+        else
+            LOG_DEBUG("playerbots.dungeonclear", "QUEUEFILL declining {}'s queue: {}",
+                      player->GetName(), refusal);
         return;
     }
 
@@ -358,7 +396,9 @@ void DcDungeonQueueFillManager::Tick(std::uint32_t diff)
     // Turning the feature off mid-flight releases what is in flight rather
     // than stranding logged-in bots in a queue nobody is watching.
     if (!DcModule::IsEnabled() ||
-        !DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable"))
+        !DcDungeonQueueFillPlanner::FillPossible(
+            DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable"),
+            DcSettings::GetUInt(ObjectGuid::Empty, "DungeonQueueFill.MaxHumansOnline")))
     {
         _deferred.clear();
         ReleaseAll("feature turned off mid-flight");
@@ -379,9 +419,21 @@ void DcDungeonQueueFillManager::Tick(std::uint32_t diff)
 
 std::string DcDungeonQueueFillManager::StatusText() const
 {
-    bool const on = DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable");
-    if (!on)
-        return "dungeon queue fill is OFF (DungeonClear.DungeonQueueFill.Enable = 0)";
+    bool const enable = DcSettings::GetBool(ObjectGuid::Empty, "DungeonQueueFill.Enable");
+    std::uint32_t const maxHumans =
+        DcSettings::GetUInt(ObjectGuid::Empty, "DungeonQueueFill.MaxHumansOnline");
+    if (!DcDungeonQueueFillPlanner::FillPossible(enable, maxHumans))
+        return "dungeon queue fill is OFF (DungeonClear.DungeonQueueFill.Enable = 0 and "
+               "MaxHumansOnline = 0)";
+
+    std::uint32_t const humans = CountHumansOnline();
+    std::string const gate =
+        enable ? "forced on (Enable = 1), " + std::to_string(humans) + " player(s) online"
+               : std::string(DcDungeonQueueFillPlanner::FillOpen(enable, maxHumans, humans)
+                                 ? "automatic, open: "
+                                 : "automatic, CLOSED to new queues: ") +
+                     std::to_string(humans) + " player(s) online, fills below " +
+                     std::to_string(maxHumans);
 
     // Deferred players are reported even when nothing is in flight: "ON, no
     // fills" while somebody sits refused in the queue is the exact report that
@@ -395,13 +447,13 @@ std::string DcDungeonQueueFillManager::StatusText() const
     }
 
     if (_jobs.empty())
-        return deferred.empty() ? "dungeon queue fill is ON, no fills in flight"
-                                : "dungeon queue fill is ON, no fills in flight, " +
+        return deferred.empty() ? "dungeon queue fill is " + gate + "; no fills in flight"
+                                : "dungeon queue fill is " + gate + "; no fills in flight, " +
                                       std::to_string(_deferred.size()) + " deferred:" + deferred;
 
     std::uint32_t const maxConcurrent =
         DcSettings::GetUInt(ObjectGuid::Empty, "DungeonQueueFill.MaxConcurrent");
-    std::string out = std::to_string(_jobs.size()) +
+    std::string out = "dungeon queue fill is " + gate + "\n" + std::to_string(_jobs.size()) +
                       (_jobs.size() == 1 ? " fill in flight" : " fills in flight") + " (" +
                       std::to_string(SettingUpCount()) + " setting up, cap " +
                       (maxConcurrent ? std::to_string(maxConcurrent) : std::string("unlimited")) +

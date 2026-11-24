@@ -143,6 +143,13 @@ private:
 
     DcDungeonQueueFillManager() = default;
 
+    // Opens the refusal RefuseReason gives when the realm has
+    // DungeonQueueFill.MaxHumansOnline real players or more online.
+    static constexpr char const* kTooManyHumans = "too many players online";
+
+    // Real players in the world: bots excluded, selfbots counted.
+    static std::uint32_t CountHumansOnline();
+
     // Why an intent was refused, for the log line. Empty = accepted.
     //
     // `transient` comes back true for a refusal that is only true right now —

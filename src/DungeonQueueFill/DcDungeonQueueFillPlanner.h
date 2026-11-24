@@ -149,6 +149,31 @@ namespace DcDungeonQueueFillPlanner
                                     std::set<std::uint8_t> const& usedClasses,
                                     std::uint32_t& state);
 
+    // Whether a fill may open, by DungeonQueueFill.Enable and
+    // DungeonQueueFill.MaxHumansOnline:
+    //   Enable = 1           -> always on, however many players are online;
+    //   MaxHumansOnline = 0  -> never on by itself (Enable alone decides);
+    //   otherwise            -> on while fewer than MaxHumansOnline real
+    //                           players are online, the queueing one included.
+    // A small realm gets the fill without touching anything; once enough
+    // people are online to make parties of their own, the bots stop taking
+    // their places in the queue. Asked when a player queues, never of a fill
+    // already in flight. Pure, for the tests.
+    inline bool FillOpen(bool enable, std::uint32_t maxHumansOnline, std::uint32_t humansOnline)
+    {
+        if (enable)
+            return true;
+        return maxHumansOnline > 0 && humansOnline < maxHumansOnline;
+    }
+
+    // Whether the feature can open a fill at all under these settings — false
+    // only when both switches are off. While it is false, fills in flight are
+    // released; a realm crossing the player threshold never does that.
+    inline bool FillPossible(bool enable, std::uint32_t maxHumansOnline)
+    {
+        return enable || maxHumansOnline > 0;
+    }
+
     // Role token -> the single role bit. kRoleNone for an unknown token.
     std::uint8_t MaskForRole(char const* role);
 
