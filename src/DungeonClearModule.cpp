@@ -102,7 +102,7 @@
 #endif
 
 // The release this tree ships as (the tag is v<version>).
-constexpr char const* kDungeonClearVersion = "3.2.2";
+constexpr char const* kDungeonClearVersion = "3.3.0";
 
 #if __has_include("CoaGroupTank.h") && __has_include("CoaHealEscort.h")
 #include "CoaGroupTank.h"
