@@ -13,8 +13,8 @@ This module is built for the Conquest of Azeroth core and
 [SquidBots](https://github.com/Zyth45/mod-playerbots) (CoA classes, CoA
 dungeons and raids). It is not meant for a classic WotLK AzerothCore server.
 
-**Latest version: [v3.1.4](https://github.com/Zyth45/mod-dungeon-clear/tree/v3.1.4)**,
-shipped with SquidBots 3.1.4.
+**Latest version: [v3.3.0](https://github.com/Zyth45/mod-dungeon-clear/tree/v3.3.0)**,
+shipped with SquidBots 3.3.
 
 **Discord (support, news, new versions): https://discord.gg/DTJceaG9Ky**
 
@@ -26,16 +26,57 @@ Clear on your own PC, from your own game client.
 [squidbots-updates](https://github.com/Zyth45/squidbots-updates) keeps an
 existing CoA Bots repack, the addon and the dashboard up to date.
 
-To build it yourself:
-
-1. Clone this repository into `modules/mod-dungeon-clear/`, next to
-   [SquidBots](https://github.com/Zyth45/mod-playerbots) in `modules/mod-playerbots/`.
-2. Re-run CMake and rebuild the worldserver.
-3. Copy `conf/mod_dungeon_clear.conf.dist` to `mod_dungeon_clear.conf` if you
-   want to change a setting.
+To build it yourself, or to add your own modules to the server, see
+[Build with your own modules](#build-with-your-own-modules).
 
 Dungeon Clear extends the SquidBots AI engine (strategies, actions, triggers and
 values): it does not run without it.
+
+## Build with your own modules
+
+Dungeon Clear is not a prebuilt library: it is a regular AzerothCore module,
+built from source together with the core and SquidBots. If you build your own
+worldserver, for example to add other modules, build these three at the
+versions of one SquidBots release:
+
+1. Clone the core, [Zyth45/azerothcore-wotlk-coa](https://github.com/Zyth45/azerothcore-wotlk-coa),
+   and check out the commit of the release (table below). It is the official
+   Conquest of Azeroth core with what SquidBots needs on top of it.
+2. Clone [SquidBots](https://github.com/Zyth45/mod-playerbots) into
+   `modules/mod-playerbots/` at the tag of the release.
+3. Clone this repository into `modules/mod-dungeon-clear/` at the tag of the
+   release.
+4. Add your own modules to `modules/`, re-run CMake and build the worldserver.
+5. Copy `conf/mod_dungeon_clear.conf.dist` to `mod_dungeon_clear.conf` if you
+   want to change a setting.
+
+At startup, the server log says which Dungeon Clear SquidBots found. If it
+says *Dungeon Clear is not built into this server*, the module was not in
+`modules/` when CMake ran.
+
+### Versions that go together
+
+| SquidBots release | Core (`azerothcore-wotlk-coa`) | SquidBots (`mod-playerbots`) | Dungeon Clear |
+|---|---|---|---|
+| 3.3 | `9458485701` | `v3.3` | `v3.3.0` |
+| 3.2.1 | `0b8ba38fc8` | `v3.2.1` | `v3.1.4` |
+| 3.2 | `fda72924e5` | `v3.2` | `v3.1.4` |
+| 3.1.7 | `fda72924e5` | `v3.1.7` | `v3.1.4` |
+| 3.1.6 | `fda72924e5` | `v3.1.6` | `v3.1.4` |
+| 3.1.5 | `162bf26fa7` | `v3.1.5` | `v3.1.4` |
+| 3.1.4 | `b39bd9232d` | `v3.1.4` | `v3.1.4` |
+
+### What we support
+
+A server built from the three versions of one row is the server the SquidBots
+updates ship, and we support it. A build with other modules added, or with
+changes to the core, is yours: we help when we can on
+[Discord](https://discord.gg/DTJceaG9Ky), but we cannot test every combination.
+Before reporting a bug, check that it also happens on the server of the table.
+
+The [SquidBots Server launcher](https://github.com/Zyth45/squidbots-launcher)
+and [squidbots-updates](https://github.com/Zyth45/squidbots-updates) install
+their own `worldserver.exe`: they replace a worldserver you built yourself.
 
 ## The addon
 
@@ -69,6 +110,30 @@ While a clear runs, the tank bot handles the dungeon end to end:
 - **Heroic and Mythic dungeons**: the tank pulls more carefully, and several
   settings have their own heroic value. A realm chooses which difficulties
   players may clear (`DungeonClear.AllowedDifficulties`).
+
+## Dungeon Finder with bots
+
+When you use the Dungeon Finder alone or with a partial group, Dungeon Clear
+fills the missing roles with bots, so you do not wait for other players
+(characters of level 15 and above). You get the
+usual "Dungeon Found" window, accept it, and the stock Dungeon Finder forms the
+group and teleports everyone in.
+
+- The bots come from the SquidBots class pool (`.playerbots addclass`). On a
+  Conquest of Azeroth realm they are of CoA classes, each given a
+  specialization for the role it fills (tank, healer or damage), and brought
+  to your level.
+- It runs by itself while fewer than 5 real players are online
+  (`DungeonClear.DungeonQueueFill.MaxHumansOnline`). From there on, players
+  can make parties of their own and the queue works as usual.
+  `DungeonClear.DungeonQueueFill.Enable = 1` keeps it on whatever the count;
+  `MaxHumansOnline = 0` with `Enable = 0` turns it off.
+- When a fill cannot be made, you are told and stay in the normal queue. The
+  reason is written to the server log (`QUEUEFILL ... released`, at warning
+  level), and the fill lines can be given their own log with
+  `Logger.playerbots.dungeonclear.queuefill`.
+- `.dc dungeonqueuefill status` (game masters) shows whether it is on, how many
+  players are online and the fills in progress.
 
 ## You tank, the bots follow
 
