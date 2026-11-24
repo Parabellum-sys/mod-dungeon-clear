@@ -1343,8 +1343,14 @@ void DcDungeonQueueFillJob::TickReleasing()
                 .PSendSysMessage("|cffff8000[Dungeon Finder]|r Could not fill your group this "
                                  "time — you are still queued normally.");
 
-    LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} released after {}s — {}", _id,
-             _totalMs / 1000, _releaseReason.empty() ? "done" : _releaseReason);
+    // A release the player was told about is a failure they saw: WARN, so the
+    // reason survives the default Logger.playerbots level.
+    if (_notifyPlayer)
+        LOG_WARN("playerbots.dungeonclear", "QUEUEFILL {} released after {}s — {}", _id,
+                 _totalMs / 1000, _releaseReason.empty() ? "done" : _releaseReason);
+    else
+        LOG_INFO("playerbots.dungeonclear", "QUEUEFILL {} released after {}s — {}", _id,
+                 _totalMs / 1000, _releaseReason.empty() ? "done" : _releaseReason);
     EnterStage(Stage::Done);
 }
 
